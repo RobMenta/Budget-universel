@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0f" />
+  <title>Budget</title>
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <!-- ✅ Icônes (iPhone + PWA) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+
+  <style>
+    :root { color-scheme: dark; }
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Segoe UI,Roboto,Arial;
+      background:#0b0b0f; color:#fff;
+    }
+    .wrap{
+  max-width:920px;
+  margin:0 auto;
+  padding:16px;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  padding-bottom: calc(28px + env(safe-area-inset-bottom));
+}
+    .top{ display:flex; align-items:center; gap:10px; }
+    .btnMonth{ width:44px;height:44px;border-radius:12px; background:#1a1a22; display:flex;align-items:center;justify-content:center; user-select:none; cursor:pointer;}
+    h1{ margin:0; font-size:28px; font-weight:900; }
+    .sub{ color:#a6a6b3; margin-top:2px; font-size:13px; }
+
+    .grid2{ display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media (min-width: 900px){ .grid2{ grid-template-columns: 1fr 1fr; } }
+
+    .card{ background:#14141b; border-radius:16px; padding:14px; margin-top:12px; }
+    .cardTitle{
+      font-weight:1000; font-size:15px; margin-bottom:10px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .badge{
+      font-size:12px; font-weight:1000; color:#0b0b0f;
+      background:#d7d7e6; padding:6px 10px; border-radius:999px;
+      white-space:nowrap;
+    }
+
+    .kpis{ display:flex; gap:10px; flex-wrap:wrap; }
+    .kpi{ flex:1; min-width: 220px; background:#1a1a22; border-radius:14px; padding:12px; }
+    .kpiLab{ color:#a6a6b3; font-size:12px; font-weight:900; }
+    .kpiVal{ font-size:20px; font-weight:1100; margin-top:6px; letter-spacing:0.2px; }
+
+    .divider{ height:1px; background:#20202a; margin:12px 0; }
+    .note{ color:#a6a6b3; font-size:12px; margin-top:8px; line-height:1.35; }
+
+    .groupTitle{
+      font-weight:1100;
+      margin-top:10px;
+      padding-top:10px;
+      border-top:1px solid #20202a;
+      color:#d7d7e6;
+    }
+    .item{
+      display:flex; gap:10px; align-items:center;
+      padding:10px 0;
+      border-top:1px solid #20202a;
+    }
+    .name{ font-weight:1000; }
+    .amt{ color:#d7d7e6; margin-top:6px; font-size:14px; font-weight:900; }
+    .actions{ display:flex; align-items:center; gap:10px; }
+    .toggle{
+      width:54px; height:32px; border-radius:18px;
+      background:#2a2a35; position:relative; cursor:pointer; user-select:none;
+      border:1px solid #2f2f3b;
+      flex:0 0 auto;
+    }
+    .toggle.on{ background:#2a4c9b; border-color:#3256ad; }
+    .knob{
+      width:26px;height:26px;border-radius:50%;
+      background:#fff; position:absolute; top:2px; left:2px;
+      transition:transform .12s ease;
+    }
+    .toggle.on .knob{ transform:translateX(22px); }
+
+    input{
+      width:100%;
+      box-sizing:border-box;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid #222232;
+      background:#1a1a22;
+      color:#fff;
+      outline:none;
+      font-size:15px;
+    }
+    input::placeholder{ color:#7a7a8a; }
+    button{
+      border:none; cursor:pointer;
+      border-radius:12px;
+      padding:12px 14px;
+      font-weight:1000;
+      color:#fff;
+    }
+    .primary{ background:#3a7afe; }
+    .muted{ background:#232334; }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:#1a1a22;
+      border:1px solid #222232;
+      border-radius:999px;
+      padding:8px 12px;
+      font-weight:1000;
+      white-space:nowrap;
+    }
+    .pill span{ color:#a6a6b3; font-weight:900; }
+
+    .smallRow{ display:flex; gap:10px; align-items:center; }
+    .smallRow > * { flex:1; }
+    .smallRow .w120{ flex:0 0 120px; }
+
+    .entry{
+      padding:10px 0;
+      border-top:1px solid #20202a;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .entryLeft{ display:flex; flex-direction:column; gap:2px; }
+    .entryMain{ font-weight:1000; }
+    .entrySub{ font-size:12px; color:#a6a6b3; font-weight:800; }
+    .entryAmt{ font-weight:1100; }
+
+    .foot{ color:#6f6f7e; text-align:center; margin-top:14px; font-size:12px; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="btnMonth" id="prevMonth">◀</div>
+      <div style="flex:1;text-align:center">
+        <h1>Budget</h1>
+        <div class="sub" id="monthLabel"></div>
+      </div>
+      <div class="btnMonth" id="nextMonth">▶</div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle">
+        <span>Résumé</span>
+        <button class="muted" id="resetMonthBtn" style="padding:10px 12px;">Reset mois</button>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpiLab">Salaire (modifiable)</div>
+          <input id="incomeInput" inputmode="decimal" placeholder="ex: 2000" />
+          <div class="note">Tu peux mettre 2000 ou 2000,50</div>
+        </div>
+        <div class="kpi">
+          <div class="kpiLab">Total fixe (Fixes + Budgets)</div>
+          <div class="kpiVal" id="kFixedTotal">0,00 €</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpiLab">Fixes payés</div>
+          <div class="kpiVal" id="kFixedPaid">0,00 €</div>
+        </div>
+        <div class="kpi">
+          <div class="kpiLab">Fixes restants (non payés + budgets restants)</div>
+          <div class="kpiVal" id="kFixedRemaining">0,00 €</div>
+        </div>
+        <div class="kpi">
+          <div class="kpiLab">Reste sur salaire</div>
+          <div class="kpiVal" id="kNetLeft">0,00 €</div>
+        </div>
+      </div>
+
+      <!-- ✅ NOUVEAU : Reste actuel -->
+      <div class="divider"></div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpiLab">Reste actuel</div>
+          <div class="kpiVal" id="kCurrentLeft">0,00 €</div>
+        </div>
+      </div>
+
+      <div class="note">
+        * Total fixe = (Appart+Perso) + (Courses 200 + Plaisir 200).<br/>
+        * Reste sur salaire = Salaire − Total fixe − (Izly + Essence + Autres).<br/>
+        * Reste actuel = Salaire − (Fixes cochés + dépenses saisies).
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="cardTitle">
+          <span>Dépenses fixes</span>
+          <span class="badge" id="fixedBadge">0 / 0 payées</span>
+        </div>
+        <div id="fixedList"></div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="cardTitle">
+            <span>Courses</span>
+            <span class="pill"><span>Reste</span> <b id="coursesLeft">0,00 €</b></span>
+          </div>
+
+          <div class="smallRow">
+            <input id="coursesAmount" inputmode="decimal" placeholder="ex: 4,50" />
+            <button class="primary w120" id="coursesAdd">OK</button>
+          </div>
+
+          <div class="note">Budget : <b id="coursesLimit">0,00 €</b> • Dépensé : <b id="coursesSpent">0,00 €</b></div>
+          <div id="coursesEntries"></div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">
+            <span>Plaisir</span>
+            <span class="pill"><span>Reste</span> <b id="funLeft">0,00 €</b></span>
+          </div>
+
+          <div class="smallRow">
+            <input id="funAmount" inputmode="decimal" placeholder="ex: 12,00" />
+            <button class="primary w120" id="funAdd">OK</button>
+          </div>
+
+          <div class="note">Budget : <b id="funLimit">0,00 €</b> • Dépensé : <b id="funSpent">0,00 €</b></div>
+          <div id="funEntries"></div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">
+            <span>Izly</span>
+            <span class="pill"><span>Total</span> <b id="izlyTotal">0,00 €</b></span>
+          </div>
+
+          <div class="smallRow">
+            <input id="izlyAmount" inputmode="decimal" placeholder="ex: 10,00" />
+            <button class="primary w120" id="izlyAdd">OK</button>
+          </div>
+
+          <div class="note">Izly s’additionne à chaque entrée.</div>
+          <div id="izlyEntries"></div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">
+            <span>Essence</span>
+            <span class="pill"><span>Total</span> <b id="fuelTotal">0,00 €</b></span>
+          </div>
+
+          <div class="smallRow">
+            <input id="fuelAmount" inputmode="decimal" placeholder="ex: 25,00" />
+            <button class="primary w120" id="fuelAdd">OK</button>
+          </div>
+
+          <div class="note">Essence s’additionne à chaque entrée.</div>
+          <div id="fuelEntries"></div>
+        </div>
+
+        <!-- ✅ NOUVEAU : Autres -->
+        <div class="card">
+          <div class="cardTitle">
+            <span>Autres</span>
+            <span class="pill"><span>Total</span> <b id="otherTotal">0,00 €</b></span>
+          </div>
+
+          <div class="smallRow">
+            <input id="otherAmount" inputmode="decimal" placeholder="ex: 8,00" />
+            <button class="primary w120" id="otherAdd">OK</button>
+          </div>
+
+          <div class="note">Autres s’additionne à chaque entrée.</div>
+          <div id="otherEntries"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">100% local • Offline après 1er chargement</div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
