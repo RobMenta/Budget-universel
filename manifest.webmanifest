@@ -1,7 +1,7 @@
 {
   "name": "Mon Budget",
   "short_name": "Budget",
-  "id": "/",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -14,4 +14,3 @@
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
-
