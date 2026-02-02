@@ -1,19 +1,13 @@
-// app.js — Budget Universel (PWA) — version repo partageable
-// Schéma: fixed[] + envelopes[] (plafond) + cumulatives[] (cumul)
-// Stockage par mois YYYY-MM
-
 const STORAGE_KEY = "budgetuniversal:pwa:v1";
 
 function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
-
 function monthKey(d = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   return `${y}-${m}`;
 }
-
 function euroToCents(input) {
   const cleaned = (input || "").replace(",", ".").trim();
   if (!cleaned) return 0;
@@ -21,11 +15,9 @@ function euroToCents(input) {
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100);
 }
-
 function centsToEuro(cents) {
   return (cents / 100).toFixed(2).replace(".", ",");
 }
-
 function fmtDate(ts) {
   const d = new Date(ts);
   const dd = String(d.getDate()).padStart(2, "0");
@@ -43,23 +35,13 @@ function loadAll() {
     return {};
   }
 }
-
 function saveAll(all) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
 }
 
-/**
- * Schéma du mois:
- * {
- *  incomeCents: number,
- *  fixed: [{id, group, name, amountCents, paid}],
- *  envelopes: [{id, name, limitCents, spentCents, entries:[{id, ts, amountCents}]}],
- *  cumulatives: [{id, name, spentCents, entries:[{id, ts, amountCents}]}]
- * }
- */
 function defaultMonthData() {
   return {
-    incomeCents: 0, // universel: vide par défaut
+    incomeCents: 0,
     fixed: [],
     envelopes: [],
     cumulatives: [],
@@ -86,13 +68,22 @@ const els = {
   fixedBadge: document.getElementById("fixedBadge"),
   fixedList: document.getElementById("fixedList"),
 
-  // nouvelles zones dynamiques (index.html sera adapté)
   fixedAddBtn: document.getElementById("fixedAddBtn"),
   addEnvelopeBtn: document.getElementById("addEnvelopeBtn"),
   addCumulativeBtn: document.getElementById("addCumulativeBtn"),
 
   envelopesContainer: document.getElementById("envelopesContainer"),
   cumulativesContainer: document.getElementById("cumulativesContainer"),
+
+  // modal
+  modalBackdrop: document.getElementById("modalBackdrop"),
+  modalTitle: document.getElementById("modalTitle"),
+  modalDesc: document.getElementById("modalDesc"),
+  modalBody: document.getElementById("modalBody"),
+  modalError: document.getElementById("modalError"),
+  modalCloseBtn: document.getElementById("modalCloseBtn"),
+  modalCancelBtn: document.getElementById("modalCancelBtn"),
+  modalOkBtn: document.getElementById("modalOkBtn"),
 };
 
 function ensureStateShape() {
@@ -103,7 +94,6 @@ function ensureStateShape() {
   if (!Array.isArray(state.envelopes)) state.envelopes = [];
   if (!Array.isArray(state.cumulatives)) state.cumulatives = [];
 
-  // normalisation légère
   state.fixed = state.fixed.map((f) => ({
     id: f.id || uid(),
     group: typeof f.group === "string" ? f.group : "",
@@ -134,7 +124,6 @@ function loadMonth() {
   ensureStateShape();
   render();
 }
-
 function persist() {
   const all = loadAll();
   all[currentMonth] = state;
@@ -144,11 +133,9 @@ function persist() {
 function sumEntries(entries) {
   return entries.reduce((s, e) => s + (Number.isFinite(e.amountCents) ? e.amountCents : 0), 0);
 }
-
 function recomputeEnvelopeSpent(env) {
   env.spentCents = sumEntries(env.entries);
 }
-
 function recomputeCumulativeSpent(obj) {
   obj.spentCents = sumEntries(obj.entries);
 }
@@ -172,11 +159,7 @@ function calc() {
 
   const netLeft = income - fixedTotal - cumulativesSpent;
 
-  const currentLeft =
-    income -
-    fixedPaidOnly -
-    budgetsSpent -
-    cumulativesSpent;
+  const currentLeft = income - fixedPaidOnly - budgetsSpent - cumulativesSpent;
 
   return { fixedTotal, fixedPaid, fixedRemaining, netLeft, currentLeft };
 }
@@ -195,6 +178,172 @@ function button(text, className) {
   return b;
 }
 
+/* ===========================
+   MODALE INTERNE
+=========================== */
+
+let modalOnOk = null;
+let modalOnCancel = null;
+
+function modalHide() {
+  if (!els.modalBackdrop) return;
+  els.modalBackdrop.classList.add("modalHidden");
+  els.modalBackdrop.setAttribute("aria-hidden", "true");
+  modalOnOk = null;
+  modalOnCancel = null;
+  if (els.modalBody) els.modalBody.innerHTML = "";
+  if (els.modalError) {
+    els.modalError.style.display = "none";
+    els.modalError.textContent = "";
+  }
+}
+
+function modalShow({
+  title,
+  desc = "",
+  fields = [], // [{key,label,placeholder,value,inputMode,type}]
+  okText = "OK",
+  cancelText = "Annuler",
+  onOk,
+  onCancel,
+  focusKey,
+}) {
+  if (!els.modalBackdrop) return;
+
+  els.modalTitle.textContent = title || "";
+  els.modalDesc.textContent = desc || "";
+  els.modalDesc.style.display = desc ? "block" : "none";
+
+  els.modalOkBtn.textContent = okText;
+  els.modalCancelBtn.textContent = cancelText;
+
+  els.modalBody.innerHTML = "";
+
+  const inputs = {};
+  for (const f of fields) {
+    const wrap = el("div", "modalField");
+    const lab = document.createElement("label");
+    lab.textContent = f.label || "";
+    const inp = document.createElement("input");
+    inp.type = f.type || "text";
+    inp.inputMode = f.inputMode || "text";
+    inp.placeholder = f.placeholder || "";
+    inp.value = f.value ?? "";
+    inp.dataset.key = f.key;
+
+    // Enter = OK
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (els.modalOkBtn) els.modalOkBtn.click();
+      }
+    });
+
+    wrap.appendChild(lab);
+    wrap.appendChild(inp);
+    els.modalBody.appendChild(wrap);
+    inputs[f.key] = inp;
+  }
+
+  function setError(msg) {
+    if (!els.modalError) return;
+    els.modalError.textContent = msg || "";
+    els.modalError.style.display = msg ? "block" : "none";
+  }
+
+  modalOnOk = () => {
+    const values = {};
+    for (const key of Object.keys(inputs)) {
+      values[key] = inputs[key].value;
+    }
+    const res = onOk ? onOk(values, setError) : true;
+    // si onOk retourne false => on reste ouvert
+    if (res !== false) modalHide();
+  };
+
+  modalOnCancel = () => {
+    if (onCancel) onCancel();
+    modalHide();
+  };
+
+  els.modalBackdrop.classList.remove("modalHidden");
+  els.modalBackdrop.setAttribute("aria-hidden", "false");
+
+  // focus
+  const toFocus = (focusKey && inputs[focusKey]) ? inputs[focusKey] : (fields[0] ? inputs[fields[0].key] : null);
+  setTimeout(() => {
+    if (toFocus) {
+      toFocus.focus();
+      toFocus.select?.();
+    }
+  }, 10);
+
+  // escape / click backdrop
+  const onKey = (e) => {
+    if (e.key === "Escape") modalHide();
+  };
+  window.addEventListener("keydown", onKey, { once: true });
+
+  els.modalBackdrop.addEventListener(
+    "click",
+    (e) => {
+      if (e.target === els.modalBackdrop) modalHide();
+    },
+    { once: true }
+  );
+
+  // bind buttons
+  els.modalOkBtn.onclick = () => modalOnOk && modalOnOk();
+  els.modalCancelBtn.onclick = () => modalOnCancel && modalOnCancel();
+  els.modalCloseBtn.onclick = () => modalOnCancel && modalOnCancel();
+}
+
+function modalInfo(title, message) {
+  modalShow({
+    title,
+    desc: message,
+    fields: [],
+    okText: "OK",
+    cancelText: "",
+    onOk: () => true,
+    onCancel: () => true,
+  });
+  // cache bouton annuler si pas utilisé
+  if (els.modalCancelBtn) els.modalCancelBtn.style.display = "none";
+  if (els.modalCloseBtn) els.modalCloseBtn.style.display = "none";
+  // réaffichage au prochain show
+  const restore = () => {
+    if (els.modalCancelBtn) els.modalCancelBtn.style.display = "";
+    if (els.modalCloseBtn) els.modalCloseBtn.style.display = "";
+  };
+  // restore après fermeture
+  const origHide = modalHide;
+  modalHide = function () {
+    restore();
+    modalHide = origHide;
+    origHide();
+  };
+}
+
+function modalConfirm(title, message, onYes) {
+  modalShow({
+    title,
+    desc: message,
+    fields: [],
+    okText: "Confirmer",
+    cancelText: "Annuler",
+    onOk: () => {
+      onYes && onYes();
+      return true;
+    },
+    onCancel: () => true,
+  });
+}
+
+/* ===========================
+   RENDER
+=========================== */
+
 function render() {
   if (els.monthLabel) els.monthLabel.textContent = currentMonth;
   if (els.incomeInput) els.incomeInput.value = centsToEuro(state.incomeCents);
@@ -204,11 +353,9 @@ function render() {
   if (els.kFixedPaid) els.kFixedPaid.textContent = `${centsToEuro(c.fixedPaid)} €`;
   if (els.kFixedRemaining) els.kFixedRemaining.textContent = `${centsToEuro(c.fixedRemaining)} €`;
   if (els.kNetLeft) els.kNetLeft.textContent = `${centsToEuro(c.netLeft)} €`;
+  if (els.kCurrentLeft) els.kCurrentLeft.textContent = `${centsToEuro(c.currentLeft)} €`;
 
-  const currentEl = els.kCurrentLeft || document.getElementById("kCurrentLeft");
-  if (currentEl) currentEl.textContent = `${centsToEuro(c.currentLeft)} €`;
-
-  // ===== Fixes =====
+  // Fixes
   if (els.fixedBadge) {
     const paidCount = state.fixed.filter((e) => e.paid).length;
     els.fixedBadge.textContent = `${paidCount} / ${state.fixed.length} payées`;
@@ -223,16 +370,13 @@ function render() {
       if (!byGroup.has(g)) byGroup.set(g, []);
       byGroup.get(g).push(f);
     }
-
     const groups = Array.from(byGroup.keys()).sort((a, b) => a.localeCompare(b, "fr"));
 
     if (groups.length === 0) {
-      const empty = el("div", "emptyHint", "Aucune charge fixe. Ajoute-en une avec “+ Ajouter”.");
-      els.fixedList.appendChild(empty);
+      els.fixedList.appendChild(el("div", "emptyHint", "Aucune charge fixe. Ajoute-en une avec “+ Ajouter”."));
     } else {
       for (const g of groups) {
-        const title = el("div", "groupTitle", g);
-        els.fixedList.appendChild(title);
+        els.fixedList.appendChild(el("div", "groupTitle", g));
 
         for (const f of byGroup.get(g)) {
           const row = el("div", "item");
@@ -259,10 +403,11 @@ function render() {
           const del = button("✕", "miniDanger");
           del.setAttribute("aria-label", "Supprimer");
           del.addEventListener("click", () => {
-            if (!confirm(`Supprimer la charge “${f.name}” ?`)) return;
-            state.fixed = state.fixed.filter((x) => x.id !== f.id);
-            persist();
-            render();
+            modalConfirm("Supprimer ?", `Supprimer la charge “${f.name}” ?`, () => {
+              state.fixed = state.fixed.filter((x) => x.id !== f.id);
+              persist();
+              render();
+            });
           });
 
           actions.appendChild(toggle);
@@ -276,14 +421,12 @@ function render() {
     }
   }
 
-  // ===== Envelopes =====
+  // Enveloppes
   if (els.envelopesContainer) {
     els.envelopesContainer.innerHTML = "";
 
     if (state.envelopes.length === 0) {
-      els.envelopesContainer.appendChild(
-        el("div", "emptyHint", "Aucune enveloppe. Ajoute un budget mensuel (Courses, Sorties, etc.).")
-      );
+      els.envelopesContainer.appendChild(el("div", "emptyHint", "Aucune enveloppe. Ajoute un budget mensuel (Courses, Sorties, etc.)."));
     } else {
       for (const env of state.envelopes) {
         els.envelopesContainer.appendChild(renderEnvelopeCard(env));
@@ -291,14 +434,12 @@ function render() {
     }
   }
 
-  // ===== Cumulatives =====
+  // Cumulatifs
   if (els.cumulativesContainer) {
     els.cumulativesContainer.innerHTML = "";
 
     if (state.cumulatives.length === 0) {
-      els.cumulativesContainer.appendChild(
-        el("div", "emptyHint", "Aucun module cumulatif. Ajoute un module (Essence, Parking, etc.).")
-      );
+      els.cumulativesContainer.appendChild(el("div", "emptyHint", "Aucun module cumulatif. Ajoute un module (Essence, Parking, etc.)."));
     } else {
       for (const mod of state.cumulatives) {
         els.cumulativesContainer.appendChild(renderCumulativeCard(mod));
@@ -307,9 +448,6 @@ function render() {
   }
 }
 
-/**
- * Render entries + suppression
- */
 function renderEntries(container, entries, onDelete) {
   container.innerHTML = "";
   const list = [...entries].slice(-8).reverse();
@@ -319,25 +457,20 @@ function renderEntries(container, entries, onDelete) {
     const row = el("div", "entry");
 
     const left = el("div", "entryLeft");
-
-    const main = el("div", "entryMain", "Dépense");
-    const sub = el("div", "entrySub", fmtDate(it.ts));
-
-    left.appendChild(main);
-    left.appendChild(sub);
+    left.appendChild(el("div", "entryMain", "Dépense"));
+    left.appendChild(el("div", "entrySub", fmtDate(it.ts)));
 
     const rightWrap = el("div", null);
     rightWrap.style.display = "flex";
     rightWrap.style.alignItems = "center";
     rightWrap.style.gap = "10px";
 
-    const right = el("div", "entryAmt", `-${centsToEuro(it.amountCents)} €`);
+    rightWrap.appendChild(el("div", "entryAmt", `-${centsToEuro(it.amountCents)} €`));
 
     const del = button("✕", "miniDanger");
     del.setAttribute("aria-label", "Supprimer");
     del.addEventListener("click", () => onDelete(it.id));
 
-    rightWrap.appendChild(right);
     rightWrap.appendChild(del);
 
     row.appendChild(left);
@@ -346,83 +479,95 @@ function renderEntries(container, entries, onDelete) {
   }
 }
 
+/* ===========================
+   ACTIONS (sans prompt)
+=========================== */
+
 function addFixed() {
-  const name = prompt("Nom de la charge fixe ? (ex: Loyer, Téléphone)");
-  if (!name) return;
+  modalShow({
+    title: "Ajouter une charge fixe",
+    desc: "Ajoute une charge mensuelle (ex: Loyer, Téléphone…).",
+    fields: [
+      { key: "name", label: "Nom", placeholder: "ex: Loyer" },
+      { key: "group", label: "Groupe (optionnel)", placeholder: "ex: Logement, Perso" },
+      { key: "amount", label: "Montant", placeholder: "ex: 650,00", inputMode: "decimal" },
+    ],
+    okText: "Ajouter",
+    cancelText: "Annuler",
+    focusKey: "name",
+    onOk: (v, setError) => {
+      const name = (v.name || "").trim();
+      const group = (v.group || "").trim();
+      const amountCents = euroToCents(v.amount);
 
-  const group = prompt("Groupe / catégorie ? (optionnel, ex: Logement, Perso)") || "";
-  const amountStr = prompt("Montant mensuel ? (ex: 650,00)");
-  const amountCents = euroToCents(amountStr);
+      if (!name) return setError("Nom obligatoire."), false;
+      if (!amountCents || amountCents <= 0) return setError("Montant invalide (ex: 650,00)."), false;
 
-  if (!amountCents || amountCents <= 0) {
-    alert("Montant invalide (ex: 650,00).");
-    return;
-  }
-
-  state.fixed.push({
-    id: uid(),
-    group: group.trim(),
-    name: name.trim(),
-    amountCents,
-    paid: false,
+      state.fixed.push({ id: uid(), group, name, amountCents, paid: false });
+      persist();
+      render();
+      return true;
+    },
   });
-
-  persist();
-  render();
 }
 
 function addEnvelope() {
-  const name = prompt("Nom de l’enveloppe ? (ex: Courses, Sorties, Animaux)");
-  if (!name) return;
+  modalShow({
+    title: "Ajouter une enveloppe",
+    desc: "Une enveloppe = un budget mensuel (plafond) + des dépenses qui se déduisent.",
+    fields: [
+      { key: "name", label: "Nom", placeholder: "ex: Courses, Sorties…" },
+      { key: "limit", label: "Budget mensuel (plafond)", placeholder: "ex: 200,00", inputMode: "decimal" },
+    ],
+    okText: "Ajouter",
+    cancelText: "Annuler",
+    focusKey: "name",
+    onOk: (v, setError) => {
+      const name = (v.name || "").trim();
+      const limitCents = euroToCents(v.limit);
 
-  const limitStr = prompt("Budget mensuel (plafond) ? (ex: 200,00)");
-  const limitCents = euroToCents(limitStr);
+      if (!name) return setError("Nom obligatoire."), false;
+      if (!Number.isFinite(limitCents) || limitCents < 0) return setError("Budget invalide (ex: 200,00)."), false;
 
-  if (limitCents < 0 || !Number.isFinite(limitCents)) {
-    alert("Montant invalide (ex: 200,00).");
-    return;
-  }
-
-  state.envelopes.push({
-    id: uid(),
-    name: name.trim(),
-    limitCents,
-    spentCents: 0,
-    entries: [],
+      state.envelopes.push({ id: uid(), name, limitCents, spentCents: 0, entries: [] });
+      persist();
+      render();
+      return true;
+    },
   });
-
-  persist();
-  render();
 }
 
 function addCumulative() {
-  const name = prompt("Nom du module cumulatif ? (ex: Essence, Parking, Cafés)");
-  if (!name) return;
+  modalShow({
+    title: "Ajouter un module cumulatif",
+    desc: "Un module cumulatif additionne les entrées (ex: Essence, Parking…).",
+    fields: [{ key: "name", label: "Nom", placeholder: "ex: Essence" }],
+    okText: "Ajouter",
+    cancelText: "Annuler",
+    focusKey: "name",
+    onOk: (v, setError) => {
+      const name = (v.name || "").trim();
+      if (!name) return setError("Nom obligatoire."), false;
 
-  state.cumulatives.push({
-    id: uid(),
-    name: name.trim(),
-    spentCents: 0,
-    entries: [],
+      state.cumulatives.push({ id: uid(), name, spentCents: 0, entries: [] });
+      persist();
+      render();
+      return true;
+    },
   });
-
-  persist();
-  render();
 }
 
 function addEnvelopeSpend(envId, amountStr) {
   const amountCents = euroToCents(amountStr);
   if (!amountCents || amountCents <= 0) {
-    alert("Montant invalide (ex: 4,50).");
+    modalInfo("Montant invalide", "Exemple : 4,50");
     return false;
   }
-
   const env = state.envelopes.find((e) => e.id === envId);
   if (!env) return false;
 
   env.entries.push({ id: uid(), ts: Date.now(), amountCents });
   recomputeEnvelopeSpent(env);
-
   persist();
   render();
   return true;
@@ -431,16 +576,14 @@ function addEnvelopeSpend(envId, amountStr) {
 function addCumulativeSpend(modId, amountStr) {
   const amountCents = euroToCents(amountStr);
   if (!amountCents || amountCents <= 0) {
-    alert("Montant invalide (ex: 10,00).");
+    modalInfo("Montant invalide", "Exemple : 10,00");
     return false;
   }
-
   const mod = state.cumulatives.find((m) => m.id === modId);
   if (!mod) return false;
 
   mod.entries.push({ id: uid(), ts: Date.now(), amountCents });
   recomputeCumulativeSpent(mod);
-
   persist();
   render();
   return true;
@@ -449,61 +592,70 @@ function addCumulativeSpend(modId, amountStr) {
 function deleteEnvelopeEntry(envId, entryId) {
   const env = state.envelopes.find((e) => e.id === envId);
   if (!env) return;
-  env.entries = env.entries.filter((e) => e.id !== entryId);
-  recomputeEnvelopeSpent(env);
-  persist();
-  render();
+
+  modalConfirm("Supprimer ?", "Supprimer cette dépense ?", () => {
+    env.entries = env.entries.filter((e) => e.id !== entryId);
+    recomputeEnvelopeSpent(env);
+    persist();
+    render();
+  });
 }
 
 function deleteCumulativeEntry(modId, entryId) {
   const mod = state.cumulatives.find((m) => m.id === modId);
   if (!mod) return;
-  mod.entries = mod.entries.filter((e) => e.id !== entryId);
-  recomputeCumulativeSpent(mod);
-  persist();
-  render();
+
+  modalConfirm("Supprimer ?", "Supprimer cette dépense ?", () => {
+    mod.entries = mod.entries.filter((e) => e.id !== entryId);
+    recomputeCumulativeSpent(mod);
+    persist();
+    render();
+  });
 }
 
 function renderEnvelopeCard(env) {
   const card = el("div", "card");
 
-  // header
   const head = el("div", "cardHead");
 
-  const title = el("div", "cardTitle", env.name);
+  const title = el("div", "cardTitleSimple", env.name);
   title.style.cursor = "pointer";
   title.title = "Cliquer pour renommer";
   title.addEventListener("click", () => {
-    const n = prompt("Nouveau nom :", env.name);
-    if (!n) return;
-    env.name = n.trim() || env.name;
-    persist();
-    render();
+    modalShow({
+      title: "Renommer l’enveloppe",
+      fields: [{ key: "name", label: "Nom", placeholder: "ex: Courses", value: env.name }],
+      okText: "OK",
+      cancelText: "Annuler",
+      focusKey: "name",
+      onOk: (v, setError) => {
+        const n = (v.name || "").trim();
+        if (!n) return setError("Nom obligatoire."), false;
+        env.name = n;
+        persist();
+        render();
+        return true;
+      },
+    });
   });
 
   const del = button("Suppr.", "miniDanger");
   del.addEventListener("click", () => {
-    if (!confirm(`Supprimer l’enveloppe “${env.name}” ?`)) return;
-    state.envelopes = state.envelopes.filter((e) => e.id !== env.id);
-    persist();
-    render();
+    modalConfirm("Supprimer l’enveloppe ?", `Supprimer “${env.name}” ?`, () => {
+      state.envelopes = state.envelopes.filter((e) => e.id !== env.id);
+      persist();
+      render();
+    });
   });
 
   head.appendChild(title);
   head.appendChild(del);
 
-  // stats line
   const stats = el("div", "budgetLine");
+  stats.appendChild(el("div", null, `Restant : ${centsToEuro(env.limitCents - env.spentCents)} €`));
+  stats.appendChild(el("div", null, `Budget : ${centsToEuro(env.limitCents)} €`));
+  stats.appendChild(el("div", null, `Dépensé : ${centsToEuro(env.spentCents)} €`));
 
-  const left = el("div", "budgetLeft", `Restant : ${centsToEuro(env.limitCents - env.spentCents)} €`);
-  const mid = el("div", "budgetMid", `Budget : ${centsToEuro(env.limitCents)} €`);
-  const right = el("div", "budgetRight", `Dépensé : ${centsToEuro(env.spentCents)} €`);
-
-  stats.appendChild(left);
-  stats.appendChild(mid);
-  stats.appendChild(right);
-
-  // limit editor
   const limitRow = el("div", "inputRow");
   const limitInput = document.createElement("input");
   limitInput.type = "text";
@@ -514,7 +666,7 @@ function renderEnvelopeCard(env) {
   const limitSave = button("OK", "mini");
   limitSave.addEventListener("click", () => {
     const v = euroToCents(limitInput.value);
-    if (!Number.isFinite(v) || v < 0) return alert("Montant invalide.");
+    if (!Number.isFinite(v) || v < 0) return modalInfo("Montant invalide", "Exemple : 200,00");
     env.limitCents = v;
     persist();
     render();
@@ -523,7 +675,6 @@ function renderEnvelopeCard(env) {
   limitRow.appendChild(limitInput);
   limitRow.appendChild(limitSave);
 
-  // add spend row
   const addRow = el("div", "inputRow");
   const amount = document.createElement("input");
   amount.type = "text";
@@ -538,7 +689,6 @@ function renderEnvelopeCard(env) {
   addRow.appendChild(amount);
   addRow.appendChild(addBtn);
 
-  // entries
   const entriesWrap = el("div", "entries");
   renderEntries(entriesWrap, env.entries, (entryId) => deleteEnvelopeEntry(env.id, entryId));
 
@@ -556,23 +706,34 @@ function renderCumulativeCard(mod) {
 
   const head = el("div", "cardHead");
 
-  const title = el("div", "cardTitle", mod.name);
+  const title = el("div", "cardTitleSimple", mod.name);
   title.style.cursor = "pointer";
   title.title = "Cliquer pour renommer";
   title.addEventListener("click", () => {
-    const n = prompt("Nouveau nom :", mod.name);
-    if (!n) return;
-    mod.name = n.trim() || mod.name;
-    persist();
-    render();
+    modalShow({
+      title: "Renommer le module",
+      fields: [{ key: "name", label: "Nom", placeholder: "ex: Essence", value: mod.name }],
+      okText: "OK",
+      cancelText: "Annuler",
+      focusKey: "name",
+      onOk: (v, setError) => {
+        const n = (v.name || "").trim();
+        if (!n) return setError("Nom obligatoire."), false;
+        mod.name = n;
+        persist();
+        render();
+        return true;
+      },
+    });
   });
 
   const del = button("Suppr.", "miniDanger");
   del.addEventListener("click", () => {
-    if (!confirm(`Supprimer “${mod.name}” ?`)) return;
-    state.cumulatives = state.cumulatives.filter((m) => m.id !== mod.id);
-    persist();
-    render();
+    modalConfirm("Supprimer le module ?", `Supprimer “${mod.name}” ?`, () => {
+      state.cumulatives = state.cumulatives.filter((m) => m.id !== mod.id);
+      persist();
+      render();
+    });
   });
 
   head.appendChild(title);
@@ -613,7 +774,10 @@ function goMonth(delta) {
   loadMonth();
 }
 
-// ===== Events (safe) =====
+/* ===========================
+   EVENTS
+=========================== */
+
 if (els.prevMonth) els.prevMonth.addEventListener("click", () => goMonth(-1));
 if (els.nextMonth) els.nextMonth.addEventListener("click", () => goMonth(+1));
 
@@ -631,25 +795,17 @@ if (els.addCumulativeBtn) els.addCumulativeBtn.addEventListener("click", addCumu
 
 if (els.resetMonthBtn) {
   els.resetMonthBtn.addEventListener("click", () => {
-    if (!confirm("Reset du mois : décocher fixes + remettre enveloppes & cumulatifs à zéro (sans supprimer les modules) ?")) return;
-
-    // Fixes: on décoche
-    state.fixed = state.fixed.map((e) => ({ ...e, paid: false }));
-
-    // Enveloppes: on garde le plafond et le nom, mais on vide les dépenses
-    for (const env of state.envelopes) {
-      env.entries = [];
-      env.spentCents = 0;
-    }
-
-    // Cumulatifs: idem
-    for (const mod of state.cumulatives) {
-      mod.entries = [];
-      mod.spentCents = 0;
-    }
-
-    persist();
-    render();
+    modalConfirm(
+      "Reset du mois ?",
+      "Décoche les charges fixes et remet à zéro les dépenses (sans supprimer les modules).",
+      () => {
+        state.fixed = state.fixed.map((e) => ({ ...e, paid: false }));
+        for (const env of state.envelopes) { env.entries = []; env.spentCents = 0; }
+        for (const mod of state.cumulatives) { mod.entries = []; mod.spentCents = 0; }
+        persist();
+        render();
+      }
+    );
   });
 }
 
