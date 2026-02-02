@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b0b0f" />
-  <title>Budget</title>
+  <title>Budget (Universel)</title>
 
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -23,12 +23,12 @@
       background:#0b0b0f; color:#fff;
     }
     .wrap{
-  max-width:920px;
-  margin:0 auto;
-  padding:16px;
-  padding-top: calc(16px + env(safe-area-inset-top));
-  padding-bottom: calc(28px + env(safe-area-inset-bottom));
-}
+      max-width:920px;
+      margin:0 auto;
+      padding:16px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      padding-bottom: calc(28px + env(safe-area-inset-bottom));
+    }
     .top{ display:flex; align-items:center; gap:10px; }
     .btnMonth{ width:44px;height:44px;border-radius:12px; background:#1a1a22; display:flex;align-items:center;justify-content:center; user-select:none; cursor:pointer;}
     h1{ margin:0; font-size:28px; font-weight:900; }
@@ -71,6 +71,7 @@
     .name{ font-weight:1000; }
     .amt{ color:#d7d7e6; margin-top:6px; font-size:14px; font-weight:900; }
     .actions{ display:flex; align-items:center; gap:10px; }
+
     .toggle{
       width:54px; height:32px; border-radius:18px;
       background:#2a2a35; position:relative; cursor:pointer; user-select:none;
@@ -97,12 +98,14 @@
       font-size:15px;
     }
     input::placeholder{ color:#7a7a8a; }
+
     button{
       border:none; cursor:pointer;
       border-radius:12px;
       padding:12px 14px;
       font-weight:1000;
       color:#fff;
+      background:#232334;
     }
     .primary{ background:#3a7afe; }
     .muted{ background:#232334; }
@@ -120,10 +123,6 @@
     }
     .pill span{ color:#a6a6b3; font-weight:900; }
 
-    .smallRow{ display:flex; gap:10px; align-items:center; }
-    .smallRow > * { flex:1; }
-    .smallRow .w120{ flex:0 0 120px; }
-
     .entry{
       padding:10px 0;
       border-top:1px solid #20202a;
@@ -136,6 +135,80 @@
     .entryMain{ font-weight:1000; }
     .entrySub{ font-size:12px; color:#a6a6b3; font-weight:800; }
     .entryAmt{ font-weight:1100; }
+
+    /* ====== Ajouts pour le mode universel (compat app.js) ====== */
+    .cardHead{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .cardTitleSimple{
+      font-weight:1000;
+      font-size:15px;
+    }
+
+    .inputRow{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      margin-top:10px;
+    }
+    .inputRow > input{ flex:1; }
+    .mini{
+      padding:12px 14px;
+      border-radius:12px;
+      background:#232334;
+      flex:0 0 auto;
+    }
+    .miniPrimary{
+      padding:12px 14px;
+      border-radius:12px;
+      background:#3a7afe;
+      flex:0 0 auto;
+      min-width: 52px;
+    }
+    .miniDanger{
+      padding:8px 10px;
+      border-radius:10px;
+      background:#2a1a1a;
+      color:#ff6b6b;
+      font-weight:1000;
+      flex:0 0 auto;
+    }
+
+    .budgetLine{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:2px;
+      margin-bottom:6px;
+      color:#d7d7e6;
+      font-weight:900;
+      font-size:13px;
+    }
+    .budgetLine > div{
+      background:#1a1a22;
+      border:1px solid #222232;
+      border-radius:999px;
+      padding:8px 12px;
+      white-space:nowrap;
+    }
+
+    .totalLine{
+      margin-top:2px;
+      margin-bottom:6px;
+      color:#d7d7e6;
+      font-weight:1000;
+    }
+
+    .emptyHint{
+      color:#a6a6b3;
+      font-size:12px;
+      line-height:1.4;
+      padding:10px 0;
+    }
 
     .foot{ color:#6f6f7e; text-align:center; margin-top:14px; font-size:12px; }
   </style>
@@ -187,7 +260,6 @@
         </div>
       </div>
 
-      <!-- ✅ NOUVEAU : Reste actuel -->
       <div class="divider"></div>
       <div class="kpis">
         <div class="kpi">
@@ -197,97 +269,53 @@
       </div>
 
       <div class="note">
-        * Total fixe = (Appart+Perso) + (Courses 200 + Plaisir 200).<br/>
-        * Reste sur salaire = Salaire − Total fixe − (Izly + Essence + Autres).<br/>
-        * Reste actuel = Salaire − (Fixes cochés + dépenses saisies).
+        * Total fixe = charges fixes + budgets (enveloppes).<br/>
+        * Reste sur salaire = Salaire − Total fixe − (modules cumulatifs).<br/>
+        * Reste actuel = Salaire − (fixes cochés + dépenses saisies).
       </div>
     </div>
 
     <div class="grid2">
+      <!-- ===== Colonne gauche : Fixes ===== -->
       <div class="card">
         <div class="cardTitle">
           <span>Dépenses fixes</span>
-          <span class="badge" id="fixedBadge">0 / 0 payées</span>
+          <span style="display:flex; gap:10px; align-items:center;">
+            <span class="badge" id="fixedBadge">0 / 0 payées</span>
+            <button class="primary" id="fixedAddBtn" style="padding:10px 12px;">+ Ajouter</button>
+          </span>
         </div>
         <div id="fixedList"></div>
+        <div class="note">Clique sur le toggle pour marquer “payé”.</div>
       </div>
 
+      <!-- ===== Colonne droite : modules dynamiques ===== -->
       <div>
+        <!-- Enveloppes -->
         <div class="card">
           <div class="cardTitle">
-            <span>Courses</span>
-            <span class="pill"><span>Reste</span> <b id="coursesLeft">0,00 €</b></span>
+            <span>Enveloppes (budgets)</span>
+            <button class="primary" id="addEnvelopeBtn" style="padding:10px 12px;">+ Ajouter</button>
           </div>
-
-          <div class="smallRow">
-            <input id="coursesAmount" inputmode="decimal" placeholder="ex: 4,50" />
-            <button class="primary w120" id="coursesAdd">OK</button>
+          <div class="note">
+            Une enveloppe = un budget mensuel (Courses, Sorties…). Ajoute des dépenses, ça déduit le restant.
           </div>
-
-          <div class="note">Budget : <b id="coursesLimit">0,00 €</b> • Dépensé : <b id="coursesSpent">0,00 €</b></div>
-          <div id="coursesEntries"></div>
         </div>
 
+        <div id="envelopesContainer"></div>
+
+        <!-- Cumulatifs -->
         <div class="card">
           <div class="cardTitle">
-            <span>Plaisir</span>
-            <span class="pill"><span>Reste</span> <b id="funLeft">0,00 €</b></span>
+            <span>Modules cumulatifs</span>
+            <button class="primary" id="addCumulativeBtn" style="padding:10px 12px;">+ Ajouter</button>
           </div>
-
-          <div class="smallRow">
-            <input id="funAmount" inputmode="decimal" placeholder="ex: 12,00" />
-            <button class="primary w120" id="funAdd">OK</button>
+          <div class="note">
+            Un module cumulatif = un total qui s’additionne au fil des entrées (Essence, Parking…).
           </div>
-
-          <div class="note">Budget : <b id="funLimit">0,00 €</b> • Dépensé : <b id="funSpent">0,00 €</b></div>
-          <div id="funEntries"></div>
         </div>
 
-        <div class="card">
-          <div class="cardTitle">
-            <span>Izly</span>
-            <span class="pill"><span>Total</span> <b id="izlyTotal">0,00 €</b></span>
-          </div>
-
-          <div class="smallRow">
-            <input id="izlyAmount" inputmode="decimal" placeholder="ex: 10,00" />
-            <button class="primary w120" id="izlyAdd">OK</button>
-          </div>
-
-          <div class="note">Izly s’additionne à chaque entrée.</div>
-          <div id="izlyEntries"></div>
-        </div>
-
-        <div class="card">
-          <div class="cardTitle">
-            <span>Essence</span>
-            <span class="pill"><span>Total</span> <b id="fuelTotal">0,00 €</b></span>
-          </div>
-
-          <div class="smallRow">
-            <input id="fuelAmount" inputmode="decimal" placeholder="ex: 25,00" />
-            <button class="primary w120" id="fuelAdd">OK</button>
-          </div>
-
-          <div class="note">Essence s’additionne à chaque entrée.</div>
-          <div id="fuelEntries"></div>
-        </div>
-
-        <!-- ✅ NOUVEAU : Autres -->
-        <div class="card">
-          <div class="cardTitle">
-            <span>Autres</span>
-            <span class="pill"><span>Total</span> <b id="otherTotal">0,00 €</b></span>
-          </div>
-
-          <div class="smallRow">
-            <input id="otherAmount" inputmode="decimal" placeholder="ex: 8,00" />
-            <button class="primary w120" id="otherAdd">OK</button>
-          </div>
-
-          <div class="note">Autres s’additionne à chaque entrée.</div>
-          <div id="otherEntries"></div>
-        </div>
+        <div id="cumulativesContainer"></div>
       </div>
     </div>
 
@@ -297,4 +325,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
