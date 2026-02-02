@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b0b0f" />
-  <title>Mon budget</title>
+  <title>Mon Budget</title>
 
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -110,19 +110,6 @@
     .primary{ background:#3a7afe; }
     .muted{ background:#232334; }
 
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      background:#1a1a22;
-      border:1px solid #222232;
-      border-radius:999px;
-      padding:8px 12px;
-      font-weight:1000;
-      white-space:nowrap;
-    }
-    .pill span{ color:#a6a6b3; font-weight:900; }
-
     .entry{
       padding:10px 0;
       border-top:1px solid #20202a;
@@ -136,7 +123,7 @@
     .entrySub{ font-size:12px; color:#a6a6b3; font-weight:800; }
     .entryAmt{ font-weight:1100; }
 
-    /* ====== Ajouts pour le mode universel (compat app.js) ====== */
+    /* ====== Ajouts compat app.js (universel) ====== */
     .cardHead{
       display:flex;
       align-items:center;
@@ -144,11 +131,6 @@
       gap:10px;
       margin-bottom:10px;
     }
-    .cardTitleSimple{
-      font-weight:1000;
-      font-size:15px;
-    }
-
     .inputRow{
       display:flex;
       gap:10px;
@@ -177,7 +159,6 @@
       font-weight:1000;
       flex:0 0 auto;
     }
-
     .budgetLine{
       display:flex;
       gap:10px;
@@ -195,14 +176,12 @@
       padding:8px 12px;
       white-space:nowrap;
     }
-
     .totalLine{
       margin-top:2px;
       margin-bottom:6px;
       color:#d7d7e6;
       font-weight:1000;
     }
-
     .emptyHint{
       color:#a6a6b3;
       font-size:12px;
@@ -211,6 +190,80 @@
     }
 
     .foot{ color:#6f6f7e; text-align:center; margin-top:14px; font-size:12px; }
+
+    /* ====== MODALE INTERNE (remplace prompt/confirm/alert) ====== */
+    .modalBackdrop{
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,0.65);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:9999;
+    }
+    .modalHidden{ display:none; }
+    .modalPanel{
+      width:min(520px, 100%);
+      background:#14141b;
+      border:1px solid #20202a;
+      border-radius:18px;
+      padding:14px;
+      box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+    }
+    .modalHead{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:10px;
+    }
+    .modalTitle{
+      font-weight:1100;
+      font-size:16px;
+      margin:0;
+    }
+    .modalDesc{
+      color:#a6a6b3;
+      font-size:12px;
+      margin-top:6px;
+      line-height:1.35;
+    }
+    .modalClose{
+      background:#232334;
+      border-radius:12px;
+      padding:10px 12px;
+      font-weight:1000;
+      flex:0 0 auto;
+    }
+    .modalBody{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin-top:10px;
+    }
+    .modalField label{
+      display:block;
+      color:#a6a6b3;
+      font-size:12px;
+      font-weight:900;
+      margin:0 0 6px 2px;
+    }
+    .modalError{
+      color:#ff6b6b;
+      font-size:12px;
+      font-weight:900;
+      margin-top:6px;
+      display:none;
+    }
+    .modalActions{
+      display:flex;
+      gap:10px;
+      margin-top:12px;
+    }
+    .modalActions > button{ flex:1; }
+    .btnGhost{ background:#232334; }
+    .btnOk{ background:#3a7afe; }
   </style>
 </head>
 
@@ -219,7 +272,7 @@
     <div class="top">
       <div class="btnMonth" id="prevMonth">◀</div>
       <div style="flex:1;text-align:center">
-        <h1>Budget</h1>
+        <h1>Mon Budget</h1>
         <div class="sub" id="monthLabel"></div>
       </div>
       <div class="btnMonth" id="nextMonth">▶</div>
@@ -276,7 +329,7 @@
     </div>
 
     <div class="grid2">
-      <!-- ===== Colonne gauche : Fixes ===== -->
+      <!-- Fixes -->
       <div class="card">
         <div class="cardTitle">
           <span>Dépenses fixes</span>
@@ -289,9 +342,8 @@
         <div class="note">Clique sur le toggle pour marquer “payé”.</div>
       </div>
 
-      <!-- ===== Colonne droite : modules dynamiques ===== -->
+      <!-- Modules dynamiques -->
       <div>
-        <!-- Enveloppes -->
         <div class="card">
           <div class="cardTitle">
             <span>Enveloppes (budgets)</span>
@@ -301,10 +353,8 @@
             Une enveloppe = un budget mensuel (Courses, Sorties…). Ajoute des dépenses, ça déduit le restant.
           </div>
         </div>
-
         <div id="envelopesContainer"></div>
 
-        <!-- Cumulatifs -->
         <div class="card">
           <div class="cardTitle">
             <span>Modules cumulatifs</span>
@@ -314,7 +364,6 @@
             Un module cumulatif = un total qui s’additionne au fil des entrées (Essence, Parking…).
           </div>
         </div>
-
         <div id="cumulativesContainer"></div>
       </div>
     </div>
@@ -322,7 +371,28 @@
     <div class="foot">100% local • Offline après 1er chargement</div>
   </div>
 
+  <!-- ✅ Modale interne -->
+  <div id="modalBackdrop" class="modalBackdrop modalHidden" aria-hidden="true">
+    <div class="modalPanel" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modalHead">
+        <div style="flex:1;">
+          <h2 class="modalTitle" id="modalTitle">Titre</h2>
+          <div class="modalDesc" id="modalDesc"></div>
+        </div>
+        <button class="modalClose" id="modalCloseBtn">✕</button>
+      </div>
+
+      <div class="modalBody" id="modalBody"></div>
+
+      <div class="modalError" id="modalError"></div>
+
+      <div class="modalActions">
+        <button class="btnGhost" id="modalCancelBtn">Annuler</button>
+        <button class="btnOk" id="modalOkBtn">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
-
