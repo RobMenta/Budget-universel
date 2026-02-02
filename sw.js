@@ -1,9 +1,12 @@
-const CACHE_NAME = "budgetcheck-cache-v2";
+const CACHE_NAME = "monbudget-cache-v1";
 const ASSETS = [
   "./",
   "./index.html",
   "./app.js",
   "./manifest.webmanifest",
+  "./icons/icon-180.png",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -31,16 +34,16 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(
     caches.match(req).then((cached) => {
-      // Cache-first = parfait pour offline
       return (
         cached ||
-        fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          return res;
-        }).catch(() => cached)
+        fetch(req)
+          .then((res) => {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+            return res;
+          })
+          .catch(() => cached)
       );
     })
   );
 });
-
