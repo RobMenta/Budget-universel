@@ -1,13 +1,19 @@
-const STORAGE_KEY = "budgetcheck:pwa:v6";
+// app.js — Budget Universel (PWA) — version repo partageable
+// Schéma: fixed[] + envelopes[] (plafond) + cumulatives[] (cumul)
+// Stockage par mois YYYY-MM
+
+const STORAGE_KEY = "budgetuniversal:pwa:v1";
 
 function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
+
 function monthKey(d = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   return `${y}-${m}`;
 }
+
 function euroToCents(input) {
   const cleaned = (input || "").replace(",", ".").trim();
   if (!cleaned) return 0;
@@ -15,9 +21,11 @@ function euroToCents(input) {
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100);
 }
+
 function centsToEuro(cents) {
   return (cents / 100).toFixed(2).replace(".", ",");
 }
+
 function fmtDate(ts) {
   const d = new Date(ts);
   const dd = String(d.getDate()).padStart(2, "0");
@@ -35,35 +43,26 @@ function loadAll() {
     return {};
   }
 }
+
 function saveAll(all) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
 }
 
+/**
+ * Schéma du mois:
+ * {
+ *  incomeCents: number,
+ *  fixed: [{id, group, name, amountCents, paid}],
+ *  envelopes: [{id, name, limitCents, spentCents, entries:[{id, ts, amountCents}]}],
+ *  cumulatives: [{id, name, spentCents, entries:[{id, ts, amountCents}]}]
+ * }
+ */
 function defaultMonthData() {
   return {
-    incomeCents: 200000, // modifiable
-    fixed: [
-      { id: uid(), group: "Appart", name: "Loyer", amountCents: 65000, paid: false },
-      { id: uid(), group: "Appart", name: "Assurance habitation", amountCents: 1979, paid: false },
-      { id: uid(), group: "Appart", name: "Électricité", amountCents: 10700, paid: false },
-      { id: uid(), group: "Appart", name: "Eau", amountCents: 1800, paid: false },
-
-      { id: uid(), group: "Perso", name: "Téléphone + ChatGPT + Crunchyroll", amountCents: 4597, paid: false },
-      { id: uid(), group: "Perso", name: "Assurance voiture", amountCents: 6845, paid: false },
-      { id: uid(), group: "Perso", name: "Coiffeur", amountCents: 2000, paid: false },
-      { id: uid(), group: "Perso", name: "Spotify + YouTube", amountCents: 1095, paid: false },
-      { id: uid(), group: "Perso", name: "Netflix", amountCents: 1499, paid: false },
-      { id: uid(), group: "Perso", name: "Crédit voiture", amountCents: 30043, paid: false },
-      { id: uid(), group: "Perso", name: "Économie", amountCents: 15000, paid: false },
-      { id: uid(), group: "Perso", name: "Internet", amountCents: 2499, paid: false },
-    ],
-    envelopes: {
-      courses: { limitCents: 20000, spentCents: 0, entries: [] },
-      plaisir: { limitCents: 20000, spentCents: 0, entries: [] },
-    },
-    izly: { spentCents: 0, entries: [] },
-    fuel: { spentCents: 0, entries: [] },
-    other: { spentCents: 0, entries: [] }, // ✅ Autres
+    incomeCents: 0, // universel: vide par défaut
+    fixed: [],
+    envelopes: [],
+    cumulatives: [],
   };
 }
 
@@ -82,49 +81,51 @@ const els = {
   kFixedPaid: document.getElementById("kFixedPaid"),
   kFixedRemaining: document.getElementById("kFixedRemaining"),
   kNetLeft: document.getElementById("kNetLeft"),
-  kCurrentLeft: document.getElementById("kCurrentLeft"), // ✅ NOUVEAU
+  kCurrentLeft: document.getElementById("kCurrentLeft"),
 
   fixedBadge: document.getElementById("fixedBadge"),
   fixedList: document.getElementById("fixedList"),
 
-  coursesLeft: document.getElementById("coursesLeft"),
-  coursesLimit: document.getElementById("coursesLimit"),
-  coursesSpent: document.getElementById("coursesSpent"),
-  coursesAmount: document.getElementById("coursesAmount"),
-  coursesAdd: document.getElementById("coursesAdd"),
-  coursesEntries: document.getElementById("coursesEntries"),
+  // nouvelles zones dynamiques (index.html sera adapté)
+  fixedAddBtn: document.getElementById("fixedAddBtn"),
+  addEnvelopeBtn: document.getElementById("addEnvelopeBtn"),
+  addCumulativeBtn: document.getElementById("addCumulativeBtn"),
 
-  funLeft: document.getElementById("funLeft"),
-  funLimit: document.getElementById("funLimit"),
-  funSpent: document.getElementById("funSpent"),
-  funAmount: document.getElementById("funAmount"),
-  funAdd: document.getElementById("funAdd"),
-  funEntries: document.getElementById("funEntries"),
-
-  izlyTotal: document.getElementById("izlyTotal"),
-  izlyAmount: document.getElementById("izlyAmount"),
-  izlyAdd: document.getElementById("izlyAdd"),
-  izlyEntries: document.getElementById("izlyEntries"),
-
-  fuelTotal: document.getElementById("fuelTotal"),
-  fuelAmount: document.getElementById("fuelAmount"),
-  fuelAdd: document.getElementById("fuelAdd"),
-  fuelEntries: document.getElementById("fuelEntries"),
-
-  otherTotal: document.getElementById("otherTotal"),
-  otherAmount: document.getElementById("otherAmount"),
-  otherAdd: document.getElementById("otherAdd"),
-  otherEntries: document.getElementById("otherEntries"),
+  envelopesContainer: document.getElementById("envelopesContainer"),
+  cumulativesContainer: document.getElementById("cumulativesContainer"),
 };
 
 function ensureStateShape() {
-  // Pour éviter de casser tes mois déjà sauvegardés (v6) qui n'ont pas "other"
-  if (!state.other) state.other = { spentCents: 0, entries: [] };
-  if (!state.fuel) state.fuel = { spentCents: 0, entries: [] };
-  if (!state.izly) state.izly = { spentCents: 0, entries: [] };
-  if (!state.envelopes) state.envelopes = { courses: { limitCents: 20000, spentCents: 0, entries: [] }, plaisir: { limitCents: 20000, spentCents: 0, entries: [] } };
-  if (!state.envelopes.courses) state.envelopes.courses = { limitCents: 20000, spentCents: 0, entries: [] };
-  if (!state.envelopes.plaisir) state.envelopes.plaisir = { limitCents: 20000, spentCents: 0, entries: [] };
+  if (!state || typeof state !== "object") state = defaultMonthData();
+
+  if (!("incomeCents" in state)) state.incomeCents = 0;
+  if (!Array.isArray(state.fixed)) state.fixed = [];
+  if (!Array.isArray(state.envelopes)) state.envelopes = [];
+  if (!Array.isArray(state.cumulatives)) state.cumulatives = [];
+
+  // normalisation légère
+  state.fixed = state.fixed.map((f) => ({
+    id: f.id || uid(),
+    group: typeof f.group === "string" ? f.group : "",
+    name: typeof f.name === "string" ? f.name : "Charge",
+    amountCents: Number.isFinite(f.amountCents) ? f.amountCents : 0,
+    paid: !!f.paid,
+  }));
+
+  state.envelopes = state.envelopes.map((e) => ({
+    id: e.id || uid(),
+    name: typeof e.name === "string" ? e.name : "Budget",
+    limitCents: Number.isFinite(e.limitCents) ? e.limitCents : 0,
+    spentCents: Number.isFinite(e.spentCents) ? e.spentCents : 0,
+    entries: Array.isArray(e.entries) ? e.entries : [],
+  }));
+
+  state.cumulatives = state.cumulatives.map((c) => ({
+    id: c.id || uid(),
+    name: typeof c.name === "string" ? c.name : "Module",
+    spentCents: Number.isFinite(c.spentCents) ? c.spentCents : 0,
+    entries: Array.isArray(c.entries) ? c.entries : [],
+  }));
 }
 
 function loadMonth() {
@@ -133,155 +134,181 @@ function loadMonth() {
   ensureStateShape();
   render();
 }
+
 function persist() {
   const all = loadAll();
   all[currentMonth] = state;
   saveAll(all);
 }
 
+function sumEntries(entries) {
+  return entries.reduce((s, e) => s + (Number.isFinite(e.amountCents) ? e.amountCents : 0), 0);
+}
+
+function recomputeEnvelopeSpent(env) {
+  env.spentCents = sumEntries(env.entries);
+}
+
+function recomputeCumulativeSpent(obj) {
+  obj.spentCents = sumEntries(obj.entries);
+}
+
 function calc() {
   const income = state.incomeCents;
 
-  const fixedExpensesTotal = state.fixed.reduce((s, e) => s + e.amountCents, 0);
-
-  // ✅ Fixes cochés uniquement (on garde pour le calcul du reste actuel)
+  const fixedTotalOnly = state.fixed.reduce((s, e) => s + e.amountCents, 0);
   const fixedPaidOnly = state.fixed.reduce((s, e) => s + (e.paid ? e.amountCents : 0), 0);
-  const unpaidFixed = fixedExpensesTotal - fixedPaidOnly;
+  const unpaidFixed = fixedTotalOnly - fixedPaidOnly;
 
-  const courses = state.envelopes.courses;
-  const plaisir = state.envelopes.plaisir;
+  const budgetsTotal = state.envelopes.reduce((s, e) => s + e.limitCents, 0);
+  const budgetsSpent = state.envelopes.reduce((s, e) => s + e.spentCents, 0);
+  const budgetsRemaining = state.envelopes.reduce((s, e) => s + (e.limitCents - e.spentCents), 0);
 
-  const budgetsTotal = courses.limitCents + plaisir.limitCents; // 200 + 200
-  const budgetsRemaining =
-    (courses.limitCents - courses.spentCents) +
-    (plaisir.limitCents - plaisir.spentCents);
+  const cumulativesSpent = state.cumulatives.reduce((s, c) => s + c.spentCents, 0);
 
-  // ✅ NOUVEAU : budgets dépensés = ajoutés à "Fixes payés"
-  const budgetsSpent = courses.spentCents + plaisir.spentCents;
-
-  const fixedTotal = fixedExpensesTotal + budgetsTotal;
-
-  // ✅ MODIF DEMANDÉE : "Fixes payés" = Fixes cochés + budgets dépensés
+  const fixedTotal = fixedTotalOnly + budgetsTotal;
   const fixedPaid = fixedPaidOnly + budgetsSpent;
-
   const fixedRemaining = unpaidFixed + budgetsRemaining;
 
-  const izlySpent = state.izly.spentCents;
-  const fuelSpent = state.fuel.spentCents;
-  const otherSpent = state.other.spentCents;
+  const netLeft = income - fixedTotal - cumulativesSpent;
 
-  const netLeft = income - fixedTotal - izlySpent - fuelSpent - otherSpent;
-
-  // ✅ Reste actuel : ce qui reste après ce que tu as déjà réellement sorti/consommé
-  // (fixes cochés + dépenses enregistrées)
   const currentLeft =
     income -
     fixedPaidOnly -
-    courses.spentCents -
-    plaisir.spentCents -
-    izlySpent -
-    fuelSpent -
-    otherSpent;
+    budgetsSpent -
+    cumulativesSpent;
 
   return { fixedTotal, fixedPaid, fixedRemaining, netLeft, currentLeft };
 }
 
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function button(text, className) {
+  const b = document.createElement("button");
+  if (className) b.className = className;
+  b.textContent = text;
+  return b;
+}
+
 function render() {
-  els.monthLabel.textContent = currentMonth;
-  els.incomeInput.value = centsToEuro(state.incomeCents);
+  if (els.monthLabel) els.monthLabel.textContent = currentMonth;
+  if (els.incomeInput) els.incomeInput.value = centsToEuro(state.incomeCents);
 
   const c = calc();
-  els.kFixedTotal.textContent = `${centsToEuro(c.fixedTotal)} €`;
-  els.kFixedPaid.textContent = `${centsToEuro(c.fixedPaid)} €`;
-  els.kFixedRemaining.textContent = `${centsToEuro(c.fixedRemaining)} €`;
-  els.kNetLeft.textContent = `${centsToEuro(c.netLeft)} €`;
+  if (els.kFixedTotal) els.kFixedTotal.textContent = `${centsToEuro(c.fixedTotal)} €`;
+  if (els.kFixedPaid) els.kFixedPaid.textContent = `${centsToEuro(c.fixedPaid)} €`;
+  if (els.kFixedRemaining) els.kFixedRemaining.textContent = `${centsToEuro(c.fixedRemaining)} €`;
+  if (els.kNetLeft) els.kNetLeft.textContent = `${centsToEuro(c.netLeft)} €`;
 
-  // ✅ MODIF UNIQUEMENT ICI : on met à jour "Reste actuel" même si els.kCurrentLeft était null au départ
   const currentEl = els.kCurrentLeft || document.getElementById("kCurrentLeft");
   if (currentEl) currentEl.textContent = `${centsToEuro(c.currentLeft)} €`;
 
-  const paidCount = state.fixed.filter((e) => e.paid).length;
-  els.fixedBadge.textContent = `${paidCount} / ${state.fixed.length} payées`;
+  // ===== Fixes =====
+  if (els.fixedBadge) {
+    const paidCount = state.fixed.filter((e) => e.paid).length;
+    els.fixedBadge.textContent = `${paidCount} / ${state.fixed.length} payées`;
+  }
 
-  // Fixes list grouped
-  els.fixedList.innerHTML = "";
-  const groups = ["Appart", "Perso"];
-  for (const g of groups) {
-    const title = document.createElement("div");
-    title.className = "groupTitle";
-    title.textContent = g;
-    els.fixedList.appendChild(title);
+  if (els.fixedList) {
+    els.fixedList.innerHTML = "";
 
-    const items = state.fixed.filter((e) => e.group === g);
-    for (const e of items) {
-      const row = document.createElement("div");
-      row.className = "item";
+    const byGroup = new Map();
+    for (const f of state.fixed) {
+      const g = (f.group || "").trim() || "Autres";
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g).push(f);
+    }
 
-      const left = document.createElement("div");
-      left.style.flex = "1";
+    const groups = Array.from(byGroup.keys()).sort((a, b) => a.localeCompare(b, "fr"));
 
-      const name = document.createElement("div");
-      name.className = "name";
-      name.textContent = e.name;
+    if (groups.length === 0) {
+      const empty = el("div", "emptyHint", "Aucune charge fixe. Ajoute-en une avec “+ Ajouter”.");
+      els.fixedList.appendChild(empty);
+    } else {
+      for (const g of groups) {
+        const title = el("div", "groupTitle", g);
+        els.fixedList.appendChild(title);
 
-      const amt = document.createElement("div");
-      amt.className = "amt";
-      amt.textContent = `${centsToEuro(e.amountCents)} €`;
+        for (const f of byGroup.get(g)) {
+          const row = el("div", "item");
 
-      left.appendChild(name);
-      left.appendChild(amt);
+          const left = el("div", null);
+          left.style.flex = "1";
 
-      const actions = document.createElement("div");
-      actions.className = "actions";
+          const name = el("div", "name", f.name);
+          const amt = el("div", "amt", `${centsToEuro(f.amountCents)} €`);
+          left.appendChild(name);
+          left.appendChild(amt);
 
-      const toggle = document.createElement("div");
-      toggle.className = "toggle" + (e.paid ? " on" : "");
-      const knob = document.createElement("div");
-      knob.className = "knob";
-      toggle.appendChild(knob);
-      toggle.addEventListener("click", () => {
-        e.paid = !e.paid;
-        persist();
-        render();
-      });
+          const actions = el("div", "actions");
 
-      actions.appendChild(toggle);
-      row.appendChild(left);
-      row.appendChild(actions);
-      els.fixedList.appendChild(row);
+          const toggle = el("div", "toggle" + (f.paid ? " on" : ""));
+          const knob = el("div", "knob");
+          toggle.appendChild(knob);
+          toggle.addEventListener("click", () => {
+            f.paid = !f.paid;
+            persist();
+            render();
+          });
+
+          const del = button("✕", "miniDanger");
+          del.setAttribute("aria-label", "Supprimer");
+          del.addEventListener("click", () => {
+            if (!confirm(`Supprimer la charge “${f.name}” ?`)) return;
+            state.fixed = state.fixed.filter((x) => x.id !== f.id);
+            persist();
+            render();
+          });
+
+          actions.appendChild(toggle);
+          actions.appendChild(del);
+
+          row.appendChild(left);
+          row.appendChild(actions);
+          els.fixedList.appendChild(row);
+        }
+      }
     }
   }
 
-  // Courses
-  const courses = state.envelopes.courses;
-  els.coursesLimit.textContent = `${centsToEuro(courses.limitCents)} €`;
-  els.coursesSpent.textContent = `${centsToEuro(courses.spentCents)} €`;
-  els.coursesLeft.textContent = `${centsToEuro(courses.limitCents - courses.spentCents)} €`;
-  renderEntries(els.coursesEntries, courses.entries, (id) => deleteEnvelopeEntry("courses", id));
+  // ===== Envelopes =====
+  if (els.envelopesContainer) {
+    els.envelopesContainer.innerHTML = "";
 
-  // Plaisir
-  const plaisir = state.envelopes.plaisir;
-  els.funLimit.textContent = `${centsToEuro(plaisir.limitCents)} €`;
-  els.funSpent.textContent = `${centsToEuro(plaisir.spentCents)} €`;
-  els.funLeft.textContent = `${centsToEuro(plaisir.limitCents - plaisir.spentCents)} €`;
-  renderEntries(els.funEntries, plaisir.entries, (id) => deleteEnvelopeEntry("plaisir", id));
+    if (state.envelopes.length === 0) {
+      els.envelopesContainer.appendChild(
+        el("div", "emptyHint", "Aucune enveloppe. Ajoute un budget mensuel (Courses, Sorties, etc.).")
+      );
+    } else {
+      for (const env of state.envelopes) {
+        els.envelopesContainer.appendChild(renderEnvelopeCard(env));
+      }
+    }
+  }
 
-  // Izly
-  els.izlyTotal.textContent = `${centsToEuro(state.izly.spentCents)} €`;
-  renderEntries(els.izlyEntries, state.izly.entries, (id) => deleteCumulativeEntry("izly", id));
+  // ===== Cumulatives =====
+  if (els.cumulativesContainer) {
+    els.cumulativesContainer.innerHTML = "";
 
-  // Essence
-  els.fuelTotal.textContent = `${centsToEuro(state.fuel.spentCents)} €`;
-  renderEntries(els.fuelEntries, state.fuel.entries, (id) => deleteCumulativeEntry("fuel", id));
-
-  // Autres
-  if (els.otherTotal) els.otherTotal.textContent = `${centsToEuro(state.other.spentCents)} €`;
-  if (els.otherEntries) renderEntries(els.otherEntries, state.other.entries, (id) => deleteCumulativeEntry("other", id));
+    if (state.cumulatives.length === 0) {
+      els.cumulativesContainer.appendChild(
+        el("div", "emptyHint", "Aucun module cumulatif. Ajoute un module (Essence, Parking, etc.).")
+      );
+    } else {
+      for (const mod of state.cumulatives) {
+        els.cumulativesContainer.appendChild(renderCumulativeCard(mod));
+      }
+    }
+  }
 }
 
 /**
- * Render entries + bouton suppression.
- * onDelete(id) est appelé quand on clique sur ✕
+ * Render entries + suppression
  */
 function renderEntries(container, entries, onDelete) {
   container.innerHTML = "";
@@ -289,44 +316,26 @@ function renderEntries(container, entries, onDelete) {
   if (list.length === 0) return;
 
   for (const it of list) {
-    const row = document.createElement("div");
-    row.className = "entry";
+    const row = el("div", "entry");
 
-    const left = document.createElement("div");
-    left.className = "entryLeft";
+    const left = el("div", "entryLeft");
 
-    const main = document.createElement("div");
-    main.className = "entryMain";
-    main.textContent = "Dépense";
-
-    const sub = document.createElement("div");
-    sub.className = "entrySub";
-    sub.textContent = fmtDate(it.ts);
+    const main = el("div", "entryMain", "Dépense");
+    const sub = el("div", "entrySub", fmtDate(it.ts));
 
     left.appendChild(main);
     left.appendChild(sub);
 
-    const rightWrap = document.createElement("div");
+    const rightWrap = el("div", null);
     rightWrap.style.display = "flex";
     rightWrap.style.alignItems = "center";
     rightWrap.style.gap = "10px";
 
-    const right = document.createElement("div");
-    right.className = "entryAmt";
-    right.textContent = `-${centsToEuro(it.amountCents)} €`;
+    const right = el("div", "entryAmt", `-${centsToEuro(it.amountCents)} €`);
 
-    const del = document.createElement("button");
-    del.textContent = "✕";
+    const del = button("✕", "miniDanger");
     del.setAttribute("aria-label", "Supprimer");
-    del.style.padding = "8px 10px";
-    del.style.borderRadius = "10px";
-    del.style.background = "#2a1a1a";
-    del.style.color = "#ff6b6b";
-    del.style.fontWeight = "1000";
-
-    del.addEventListener("click", () => {
-      onDelete(it.id);
-    });
+    del.addEventListener("click", () => onDelete(it.id));
 
     rightWrap.appendChild(right);
     rightWrap.appendChild(del);
@@ -337,61 +346,263 @@ function renderEntries(container, entries, onDelete) {
   }
 }
 
-function recomputeEnvelopeSpent(env) {
-  env.spentCents = env.entries.reduce((s, e) => s + e.amountCents, 0);
-}
-function recomputeCumulativeSpent(obj) {
-  obj.spentCents = obj.entries.reduce((s, e) => s + e.amountCents, 0);
-}
+function addFixed() {
+  const name = prompt("Nom de la charge fixe ? (ex: Loyer, Téléphone)");
+  if (!name) return;
 
-// --- Suppressions ---
-// Courses / Plaisir : on enlève l'entrée et on recalcule spent
-function deleteEnvelopeEntry(key, id) {
-  const env = state.envelopes[key];
-  env.entries = env.entries.filter((e) => e.id !== id);
-  recomputeEnvelopeSpent(env);
+  const group = prompt("Groupe / catégorie ? (optionnel, ex: Logement, Perso)") || "";
+  const amountStr = prompt("Montant mensuel ? (ex: 650,00)");
+  const amountCents = euroToCents(amountStr);
+
+  if (!amountCents || amountCents <= 0) {
+    alert("Montant invalide (ex: 650,00).");
+    return;
+  }
+
+  state.fixed.push({
+    id: uid(),
+    group: group.trim(),
+    name: name.trim(),
+    amountCents,
+    paid: false,
+  });
+
   persist();
   render();
 }
 
-// Izly / Essence / Autres : on enlève l'entrée et on recalcule spent
-function deleteCumulativeEntry(which, id) {
-  const obj =
-    which === "izly" ? state.izly :
-    which === "fuel" ? state.fuel :
-    state.other;
+function addEnvelope() {
+  const name = prompt("Nom de l’enveloppe ? (ex: Courses, Sorties, Animaux)");
+  if (!name) return;
 
-  obj.entries = obj.entries.filter((e) => e.id !== id);
-  recomputeCumulativeSpent(obj);
+  const limitStr = prompt("Budget mensuel (plafond) ? (ex: 200,00)");
+  const limitCents = euroToCents(limitStr);
+
+  if (limitCents < 0 || !Number.isFinite(limitCents)) {
+    alert("Montant invalide (ex: 200,00).");
+    return;
+  }
+
+  state.envelopes.push({
+    id: uid(),
+    name: name.trim(),
+    limitCents,
+    spentCents: 0,
+    entries: [],
+  });
+
   persist();
   render();
 }
 
-function addEnvelopeSpend(key, amountStr) {
+function addCumulative() {
+  const name = prompt("Nom du module cumulatif ? (ex: Essence, Parking, Cafés)");
+  if (!name) return;
+
+  state.cumulatives.push({
+    id: uid(),
+    name: name.trim(),
+    spentCents: 0,
+    entries: [],
+  });
+
+  persist();
+  render();
+}
+
+function addEnvelopeSpend(envId, amountStr) {
   const amountCents = euroToCents(amountStr);
   if (!amountCents || amountCents <= 0) {
     alert("Montant invalide (ex: 4,50).");
     return false;
   }
-  const env = state.envelopes[key];
-  env.spentCents += amountCents;
+
+  const env = state.envelopes.find((e) => e.id === envId);
+  if (!env) return false;
+
   env.entries.push({ id: uid(), ts: Date.now(), amountCents });
+  recomputeEnvelopeSpent(env);
+
   persist();
   render();
   return true;
 }
 
-function addCumulativeSpend(obj, amountStr) {
+function addCumulativeSpend(modId, amountStr) {
   const amountCents = euroToCents(amountStr);
   if (!amountCents || amountCents <= 0) {
     alert("Montant invalide (ex: 10,00).");
     return false;
   }
-  obj.spentCents += amountCents;
-  obj.entries.push({ id: uid(), ts: Date.now(), amountCents });
+
+  const mod = state.cumulatives.find((m) => m.id === modId);
+  if (!mod) return false;
+
+  mod.entries.push({ id: uid(), ts: Date.now(), amountCents });
+  recomputeCumulativeSpent(mod);
+
   persist();
   render();
   return true;
+}
+
+function deleteEnvelopeEntry(envId, entryId) {
+  const env = state.envelopes.find((e) => e.id === envId);
+  if (!env) return;
+  env.entries = env.entries.filter((e) => e.id !== entryId);
+  recomputeEnvelopeSpent(env);
+  persist();
+  render();
+}
+
+function deleteCumulativeEntry(modId, entryId) {
+  const mod = state.cumulatives.find((m) => m.id === modId);
+  if (!mod) return;
+  mod.entries = mod.entries.filter((e) => e.id !== entryId);
+  recomputeCumulativeSpent(mod);
+  persist();
+  render();
+}
+
+function renderEnvelopeCard(env) {
+  const card = el("div", "card");
+
+  // header
+  const head = el("div", "cardHead");
+
+  const title = el("div", "cardTitle", env.name);
+  title.style.cursor = "pointer";
+  title.title = "Cliquer pour renommer";
+  title.addEventListener("click", () => {
+    const n = prompt("Nouveau nom :", env.name);
+    if (!n) return;
+    env.name = n.trim() || env.name;
+    persist();
+    render();
+  });
+
+  const del = button("Suppr.", "miniDanger");
+  del.addEventListener("click", () => {
+    if (!confirm(`Supprimer l’enveloppe “${env.name}” ?`)) return;
+    state.envelopes = state.envelopes.filter((e) => e.id !== env.id);
+    persist();
+    render();
+  });
+
+  head.appendChild(title);
+  head.appendChild(del);
+
+  // stats line
+  const stats = el("div", "budgetLine");
+
+  const left = el("div", "budgetLeft", `Restant : ${centsToEuro(env.limitCents - env.spentCents)} €`);
+  const mid = el("div", "budgetMid", `Budget : ${centsToEuro(env.limitCents)} €`);
+  const right = el("div", "budgetRight", `Dépensé : ${centsToEuro(env.spentCents)} €`);
+
+  stats.appendChild(left);
+  stats.appendChild(mid);
+  stats.appendChild(right);
+
+  // limit editor
+  const limitRow = el("div", "inputRow");
+  const limitInput = document.createElement("input");
+  limitInput.type = "text";
+  limitInput.inputMode = "decimal";
+  limitInput.placeholder = "Budget mensuel (ex: 200,00)";
+  limitInput.value = centsToEuro(env.limitCents);
+
+  const limitSave = button("OK", "mini");
+  limitSave.addEventListener("click", () => {
+    const v = euroToCents(limitInput.value);
+    if (!Number.isFinite(v) || v < 0) return alert("Montant invalide.");
+    env.limitCents = v;
+    persist();
+    render();
+  });
+
+  limitRow.appendChild(limitInput);
+  limitRow.appendChild(limitSave);
+
+  // add spend row
+  const addRow = el("div", "inputRow");
+  const amount = document.createElement("input");
+  amount.type = "text";
+  amount.inputMode = "decimal";
+  amount.placeholder = "Dépense (ex: 4,50)";
+
+  const addBtn = button("+", "miniPrimary");
+  addBtn.addEventListener("click", () => {
+    if (addEnvelopeSpend(env.id, amount.value)) amount.value = "";
+  });
+
+  addRow.appendChild(amount);
+  addRow.appendChild(addBtn);
+
+  // entries
+  const entriesWrap = el("div", "entries");
+  renderEntries(entriesWrap, env.entries, (entryId) => deleteEnvelopeEntry(env.id, entryId));
+
+  card.appendChild(head);
+  card.appendChild(stats);
+  card.appendChild(limitRow);
+  card.appendChild(addRow);
+  card.appendChild(entriesWrap);
+
+  return card;
+}
+
+function renderCumulativeCard(mod) {
+  const card = el("div", "card");
+
+  const head = el("div", "cardHead");
+
+  const title = el("div", "cardTitle", mod.name);
+  title.style.cursor = "pointer";
+  title.title = "Cliquer pour renommer";
+  title.addEventListener("click", () => {
+    const n = prompt("Nouveau nom :", mod.name);
+    if (!n) return;
+    mod.name = n.trim() || mod.name;
+    persist();
+    render();
+  });
+
+  const del = button("Suppr.", "miniDanger");
+  del.addEventListener("click", () => {
+    if (!confirm(`Supprimer “${mod.name}” ?`)) return;
+    state.cumulatives = state.cumulatives.filter((m) => m.id !== mod.id);
+    persist();
+    render();
+  });
+
+  head.appendChild(title);
+  head.appendChild(del);
+
+  const total = el("div", "totalLine", `Total : ${centsToEuro(mod.spentCents)} €`);
+
+  const addRow = el("div", "inputRow");
+  const amount = document.createElement("input");
+  amount.type = "text";
+  amount.inputMode = "decimal";
+  amount.placeholder = "Montant (ex: 10,00)";
+
+  const addBtn = button("+", "miniPrimary");
+  addBtn.addEventListener("click", () => {
+    if (addCumulativeSpend(mod.id, amount.value)) amount.value = "";
+  });
+
+  addRow.appendChild(amount);
+  addRow.appendChild(addBtn);
+
+  const entriesWrap = el("div", "entries");
+  renderEntries(entriesWrap, mod.entries, (entryId) => deleteCumulativeEntry(mod.id, entryId));
+
+  card.appendChild(head);
+  card.appendChild(total);
+  card.appendChild(addRow);
+  card.appendChild(entriesWrap);
+
+  return card;
 }
 
 function goMonth(delta) {
@@ -402,50 +613,45 @@ function goMonth(delta) {
   loadMonth();
 }
 
-els.prevMonth.addEventListener("click", () => goMonth(-1));
-els.nextMonth.addEventListener("click", () => goMonth(+1));
+// ===== Events (safe) =====
+if (els.prevMonth) els.prevMonth.addEventListener("click", () => goMonth(-1));
+if (els.nextMonth) els.nextMonth.addEventListener("click", () => goMonth(+1));
 
-els.coursesAdd.addEventListener("click", () => {
-  if (addEnvelopeSpend("courses", els.coursesAmount.value)) els.coursesAmount.value = "";
-});
-els.funAdd.addEventListener("click", () => {
-  if (addEnvelopeSpend("plaisir", els.funAmount.value)) els.funAmount.value = "";
-});
-els.izlyAdd.addEventListener("click", () => {
-  if (addCumulativeSpend(state.izly, els.izlyAmount.value)) els.izlyAmount.value = "";
-});
-els.fuelAdd.addEventListener("click", () => {
-  if (addCumulativeSpend(state.fuel, els.fuelAmount.value)) els.fuelAmount.value = "";
-});
-if (els.otherAdd) {
-  els.otherAdd.addEventListener("click", () => {
-    if (addCumulativeSpend(state.other, els.otherAmount.value)) els.otherAmount.value = "";
+if (els.incomeInput) {
+  els.incomeInput.addEventListener("change", () => {
+    state.incomeCents = euroToCents(els.incomeInput.value);
+    persist();
+    render();
   });
 }
 
-// Salaire modifiable (sauvegarde quand tu changes)
-els.incomeInput.addEventListener("change", () => {
-  state.incomeCents = euroToCents(els.incomeInput.value);
-  persist();
-  render();
-});
+if (els.fixedAddBtn) els.fixedAddBtn.addEventListener("click", addFixed);
+if (els.addEnvelopeBtn) els.addEnvelopeBtn.addEventListener("click", addEnvelope);
+if (els.addCumulativeBtn) els.addCumulativeBtn.addEventListener("click", addCumulative);
 
-els.resetMonthBtn.addEventListener("click", () => {
-  if (!confirm("Reset du mois : décocher fixes + remettre Courses/Plaisir/Izly/Essence/Autres à zéro ?")) return;
-  state.fixed = state.fixed.map((e) => ({ ...e, paid: false }));
-  state.envelopes.courses.spentCents = 0;
-  state.envelopes.courses.entries = [];
-  state.envelopes.plaisir.spentCents = 0;
-  state.envelopes.plaisir.entries = [];
-  state.izly.spentCents = 0;
-  state.izly.entries = [];
-  state.fuel.spentCents = 0;
-  state.fuel.entries = [];
-  state.other.spentCents = 0;
-  state.other.entries = [];
-  persist();
-  render();
-});
+if (els.resetMonthBtn) {
+  els.resetMonthBtn.addEventListener("click", () => {
+    if (!confirm("Reset du mois : décocher fixes + remettre enveloppes & cumulatifs à zéro (sans supprimer les modules) ?")) return;
+
+    // Fixes: on décoche
+    state.fixed = state.fixed.map((e) => ({ ...e, paid: false }));
+
+    // Enveloppes: on garde le plafond et le nom, mais on vide les dépenses
+    for (const env of state.envelopes) {
+      env.entries = [];
+      env.spentCents = 0;
+    }
+
+    // Cumulatifs: idem
+    for (const mod of state.cumulatives) {
+      mod.entries = [];
+      mod.spentCents = 0;
+    }
+
+    persist();
+    render();
+  });
+}
 
 // Offline (service worker)
 if ("serviceWorker" in navigator) {
